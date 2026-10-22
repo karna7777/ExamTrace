@@ -19,15 +19,52 @@ export default function CreateExam({ examId, onSaved, onCancel }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(!!examId);
+  // AI draft generation (optional, Groq)
+  const [aiAvailable, setAiAvailable] = useState(false);
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiCount, setAiCount] = useState(5);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState(null);
 
   // For a new exam, default the duration to the examiner's configured default.
+  // Also check whether AI generation is available (a Groq key is configured).
   useEffect(() => {
-    if (examId) return;
     api
       .getSettings()
-      .then((s) => setDurationMinutes(s.defaultDurationMinutes))
+      .then((s) => {
+        if (!examId) setDurationMinutes(s.defaultDurationMinutes);
+        setAiAvailable(!!s.groqConfigured);
+      })
       .catch(() => {});
   }, [examId]);
+
+  async function generateWithAI() {
+    setAiError(null);
+    if (!aiTopic.trim()) {
+      setAiError("Enter a topic first.");
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const res = await api.generateQuestions(aiTopic, Number(aiCount));
+      // Append drafts for the examiner to review and edit.
+      setQuestions((prev) => {
+        const drafts = res.questions.map((q) => ({
+          text: q.text,
+          options: [...q.options],
+          correctAnswer: q.correctAnswer,
+          explanation: q.explanation || ""
+        }));
+        // Drop a single empty starter question if it's still blank.
+        const base = prev.length === 1 && !prev[0].text.trim() ? [] : prev;
+        return base.concat(drafts);
+      });
+    } catch (err) {
+      setAiError(String(err.message || err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   // If editing, load the full exam (including answer key) from Main.
   useEffect(() => {
@@ -144,6 +181,42 @@ export default function CreateExam({ examId, onSaved, onCancel }) {
           placeholder="Optional"
         />
       </section>
+
+      {aiAvailable && (
+        <section className="panel ai-panel">
+          <h2>Draft with AI (Groq)</h2>
+          <p className="muted">
+            Generate draft questions from a topic, then review and verify each one before saving.
+            Do not trust the generated correct answers without checking them.
+          </p>
+          <div className="field-row">
+            <div className="field-col">
+              <label className="field-label">Topic</label>
+              <input
+                className="text-input"
+                value={aiTopic}
+                onChange={(e) => setAiTopic(e.target.value)}
+                placeholder="e.g. Operating System scheduling"
+              />
+            </div>
+            <div className="field-col" style={{ maxWidth: 140 }}>
+              <label className="field-label">How many</label>
+              <input
+                className="text-input"
+                type="number"
+                min="1"
+                max="10"
+                value={aiCount}
+                onChange={(e) => setAiCount(e.target.value)}
+              />
+            </div>
+          </div>
+          {aiError && <p className="status error">{aiError}</p>}
+          <button className="btn btn-primary" onClick={generateWithAI} disabled={aiBusy}>
+            {aiBusy ? "Generating..." : "Generate draft questions"}
+          </button>
+        </section>
+      )}
 
       <div className="section-head">
         <h2>Questions ({questions.length})</h2>

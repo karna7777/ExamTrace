@@ -12,6 +12,9 @@ const examService = require("../services/examService.cjs");
 const settingsService = require("../services/settingsService.cjs");
 const examSession = require("../services/examSessionService.cjs");
 const attemptService = require("../services/attemptService.cjs");
+const { buildReportHtml } = require("../services/reportExport.cjs");
+const groqService = require("../services/groqService.cjs");
+const fs = require("fs/promises");
 
 // True while a candidate examination is in progress. Examiner actions are
 // blocked during an active exam so the candidate can't reach editing controls.
@@ -128,6 +131,22 @@ function registerHandlers() {
   ipcMain.handle("exam:getHistory", () => attemptService.getHistory());
   ipcMain.handle("exam:getReport", (event, attemptId) => attemptService.getReport(attemptId));
 
+  // Export a report to an HTML file the user chooses (native save dialog).
+  ipcMain.handle("exam:exportReport", async (event, attemptId) => {
+    const result = await attemptService.getReport(attemptId);
+    if (!result) throw new Error("Report not found.");
+    const safeTitle = String(result.title || "exam").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    const win = BrowserWindow.getFocusedWindow();
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: "Export report",
+      defaultPath: safeTitle + "-report.html",
+      filters: [{ name: "HTML", extensions: ["html"] }]
+    });
+    if (canceled || !filePath) return { ok: false, cancelled: true };
+    await fs.writeFile(filePath, buildReportHtml(result), "utf8");
+    return { ok: true, path: filePath };
+  });
+
   ipcMain.handle("exam:saveAnswer", (event, questionId, answerIndex) => {
     return examSession.saveAnswer(questionId, answerIndex);
   });
@@ -139,10 +158,23 @@ function registerHandlers() {
   ipcMain.handle("exam:submit", () => examSession.submitExam());
 
   // ---- Settings ----
-  ipcMain.handle("settings:get", () => settingsService.getSettings());
-  ipcMain.handle("settings:save", (event, patch) => {
+  // Never return the Groq API key to the renderer - expose only whether one is
+  // set. Both get and save go through the same sanitizer.
+  const sanitizeSettings = (s) => {
+    const { groqApiKey, ...rest } = s;
+    return { ...rest, groqConfigured: !!groqApiKey };
+  };
+  ipcMain.handle("settings:get", async () => sanitizeSettings(await settingsService.getSettings()));
+  ipcMain.handle("settings:save", async (event, patch) => {
     // Main decides which keys this mode may change.
-    return settingsService.updateSettings(patch, authService.isUnlocked());
+    const updated = await settingsService.updateSettings(patch, authService.isUnlocked());
+    return sanitizeSettings(updated);
+  });
+
+  // ---- Groq AI question generation (examiner-only) ----
+  ipcMain.handle("ai:generateQuestions", (event, topic, count) => {
+    requireExaminer();
+    return groqService.generateQuestions(topic, count);
   });
 }
 

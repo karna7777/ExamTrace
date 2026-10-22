@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import { api } from "../api.js";
 
-export default function PreExam({ exam, onStarted, onCancel }) {
+export default function PreExam({ exam, settings, onStarted, onCancel }) {
   const [name, setName] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -44,6 +44,9 @@ export default function PreExam({ exam, onStarted, onCancel }) {
             <li>The timer is {exam.durationMinutes} minutes and runs continuously once started.</li>
             <li>Switching away from this window, minimizing, exiting fullscreen and system inactivity will be recorded in an activity timeline.</li>
             <li>Monitoring records events for later review. It does not prove misconduct and does not pause the timer.</li>
+            {settings && settings.cameraMonitoring && (
+              <li>A camera preview will be shown during this exam. No video is recorded or uploaded.</li>
+            )}
             <li>Your name is self-reported and saved with this attempt - it is not verified identity.</li>
           </ul>
         </div>

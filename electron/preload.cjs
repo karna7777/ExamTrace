@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld("examTrace", {
   submitExam: () => ipcRenderer.invoke("exam:submit"),
   getExamHistory: () => ipcRenderer.invoke("exam:getHistory"),
   getExamReport: (attemptId) => ipcRenderer.invoke("exam:getReport", attemptId),
+  exportReport: (attemptId) => ipcRenderer.invoke("exam:exportReport", attemptId),
+  generateQuestions: (topic, count) => ipcRenderer.invoke("ai:generateQuestions", topic, count),
 
   // --- Settings ---
   getSettings: () => ipcRenderer.invoke("settings:get"),

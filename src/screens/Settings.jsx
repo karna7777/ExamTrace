@@ -11,6 +11,7 @@ export default function Settings({ isExaminer, settings, onSettingsChanged }) {
     <div>
       <ThemePanel settings={settings} onSettingsChanged={onSettingsChanged} />
       {isExaminer && <ExaminerSettingsPanel settings={settings} onSettingsChanged={onSettingsChanged} />}
+      {isExaminer && <GroqPanel settings={settings} onSettingsChanged={onSettingsChanged} />}
       {isExaminer && <ChangePasscode />}
     </div>
   );
@@ -59,6 +60,7 @@ function ExaminerSettingsPanel({ settings, onSettingsChanged }) {
   const [fullscreen, setFullscreen] = useState(settings.fullscreenDuringExam);
   const [idle, setIdle] = useState(settings.inactivityThresholdSeconds);
   const [demo, setDemo] = useState(settings.demoMode);
+  const [camera, setCamera] = useState(settings.cameraMonitoring);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -72,7 +74,8 @@ function ExaminerSettingsPanel({ settings, onSettingsChanged }) {
         defaultDurationMinutes: Number(duration),
         fullscreenDuringExam: fullscreen,
         inactivityThresholdSeconds: Number(idle),
-        demoMode: demo
+        demoMode: demo,
+        cameraMonitoring: camera
       });
       onSettingsChanged(updated);
       setMessage("Settings saved.");
@@ -115,11 +118,65 @@ function ExaminerSettingsPanel({ settings, onSettingsChanged }) {
         <span>Demo Mode (10-second inactivity threshold for demonstrations)</span>
       </label>
 
+      <label className="checkbox-row">
+        <input type="checkbox" checked={camera} onChange={(e) => setCamera(e.target.checked)} />
+        <span>Camera monitoring (live preview during exams; never recorded or uploaded)</span>
+      </label>
+
       {error && <p className="status error">{error}</p>}
       {message && <p className="status success">{message}</p>}
 
       <button className="btn btn-primary" onClick={save} disabled={busy}>
         {busy ? "Saving..." : "Save preferences"}
+      </button>
+    </section>
+  );
+}
+
+function GroqPanel({ settings, onSettingsChanged }) {
+  const [key, setKey] = useState("");
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setError(null);
+    setMessage(null);
+    if (!key.trim()) {
+      setError("Please paste a Groq API key.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await api.saveSettings({ groqApiKey: key.trim() });
+      onSettingsChanged(updated);
+      setKey("");
+      setMessage("API key saved.");
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>AI question generation (Groq)</h2>
+      <p className="muted">
+        Optional. Lets you draft questions from a topic in the Exam Creator. The key is stored
+        locally and never shown again. Status: {settings.groqConfigured ? "configured" : "not configured"}.
+      </p>
+      <input
+        type="password"
+        className="text-input"
+        placeholder={settings.groqConfigured ? "Enter a new key to replace the current one" : "Paste your Groq API key"}
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+      />
+      {error && <p className="status error">{error}</p>}
+      {message && <p className="status success">{message}</p>}
+      <button className="btn btn-primary" onClick={save} disabled={busy}>
+        {busy ? "Saving..." : "Save API key"}
       </button>
     </section>
   );

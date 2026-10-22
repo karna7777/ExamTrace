@@ -6,7 +6,7 @@
 // file persistence. The React UI runs in a separate Renderer process and
 // talks to Main only through secure IPC exposed by the preload script.
 
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, session } = require("electron");
 const path = require("path");
 const { registerHandlers } = require("./ipc/handlers.cjs");
 const windowRef = require("./windowRef.cjs");
@@ -91,6 +91,13 @@ function createMainWindow() {
 app.whenReady().then(() => {
   // Register all IPC handlers once, before any window can call them.
   registerHandlers();
+
+  // Allow the camera (media) for the optional camera-monitoring feature; deny
+  // everything else by default. macOS still shows its own system permission
+  // prompt the first time the camera is used.
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permission === "media");
+  });
 
   // Helpful during development: confirm the data directory is correct.
   console.log("[ExamTrace] userData path:", app.getPath("userData"));

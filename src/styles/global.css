@@ -1267,3 +1267,23 @@ body {
   text-overflow: ellipsis;
   max-width: 56px;
 }
+
+/* ---- Camera preview ---- */
+.camera-panel {
+  margin-top: 16px;
+}
+
+.camera-video {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.camera-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+}
+

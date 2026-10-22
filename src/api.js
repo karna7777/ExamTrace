@@ -31,6 +31,8 @@ export const api = {
   submitExam: () => bridge.submitExam(),
   getExamHistory: () => bridge.getExamHistory(),
   getExamReport: (attemptId) => bridge.getExamReport(attemptId),
+  exportReport: (attemptId) => bridge.exportReport(attemptId),
+  generateQuestions: (topic, count) => bridge.generateQuestions(topic, count),
 
   // Settings
   getSettings: () => bridge.getSettings(),

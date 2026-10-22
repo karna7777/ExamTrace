@@ -1,8 +1,8 @@
 // Examination result + answer review. Shown after submission (manual or auto).
 // All numbers are calculated in Main; correct answers are only revealed here,
 // after finalization.
-import React from "react";
-import { formatTime } from "../api.js";
+import React, { useState } from "react";
+import { api, formatTime } from "../api.js";
 import MonitoringTimeline from "../components/MonitoringTimeline.jsx";
 
 export default function ExamResult({ result, onDone, embedded, backLabel }) {
@@ -15,6 +15,18 @@ export default function ExamResult({ result, onDone, embedded, backLabel }) {
   }
 
   const optionLetter = (i) => String.fromCharCode(65 + i); // 0 -> A
+  const [exportMsg, setExportMsg] = useState(null);
+
+  async function handleExport() {
+    setExportMsg(null);
+    try {
+      const res = await api.exportReport(result.attemptId);
+      if (res && res.ok) setExportMsg("Report saved.");
+      else if (res && res.cancelled) setExportMsg(null);
+    } catch (err) {
+      setExportMsg("Export failed: " + String(err.message || err));
+    }
+  }
 
   return (
     <div className={embedded ? "result-embedded" : "result-screen"}>
@@ -91,6 +103,10 @@ export default function ExamResult({ result, onDone, embedded, backLabel }) {
         </div>
 
         <div className="creator-actions">
+          {exportMsg && <span className="muted" style={{ alignSelf: "center" }}>{exportMsg}</span>}
+          <button className="btn btn-ghost" onClick={handleExport}>
+            Export report
+          </button>
           <button className="btn btn-primary" onClick={onDone}>
             {backLabel || "Back to Dashboard"}
           </button>

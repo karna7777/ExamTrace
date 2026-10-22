@@ -87,6 +87,7 @@ export default function App() {
     return (
       <PreExam
         exam={examFlow.exam}
+        settings={settings}
         onStarted={() => setExamFlow({ view: "workspace", exam: null, result: null })}
         onCancel={() => setExamFlow({ view: "none", exam: null, result: null })}
       />

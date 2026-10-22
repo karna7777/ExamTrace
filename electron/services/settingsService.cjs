@@ -16,6 +16,8 @@ const DEFAULTS = {
   fullscreenDuringExam: false,
   inactivityThresholdSeconds: 60,
   demoMode: false,
+  cameraMonitoring: false,
+  groqApiKey: "", // examiner-only; never returned to the renderer (see settings:get)
   sampleExamSeeded: false
 };
 

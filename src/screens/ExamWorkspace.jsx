@@ -9,6 +9,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { api, formatTime } from "../api.js";
 import QuestionPalette from "../components/QuestionPalette.jsx";
 import MonitoringTimeline from "../components/MonitoringTimeline.jsx";
+import CameraPreview from "../components/CameraPreview.jsx";
 import Modal from "../components/Modal.jsx";
 
 export default function ExamWorkspace({ onFinish }) {
@@ -23,6 +24,7 @@ export default function ExamWorkspace({ onFinish }) {
   const [events, setEvents] = useState([]);
   const [status, setStatus] = useState({ active: true, awayNow: false, idleNow: false });
   const [warning, setWarning] = useState(null);
+  const [cameraOn, setCameraOn] = useState(false);
   const finishedRef = useRef(false);
 
   // Restore the active exam from Main and subscribe to timer + completion events.
@@ -66,6 +68,13 @@ export default function ExamWorkspace({ onFinish }) {
       setRemainingMs(active.remainingMs);
       setEvents(active.events || []);
       if (active.monitoring) setStatus(active.monitoring);
+      // Opt-in camera preview (examiner setting).
+      try {
+        const settings = await api.getSettings();
+        setCameraOn(!!settings.cameraMonitoring);
+      } catch {
+        // ignore - camera is optional
+      }
       setLoading(false);
     }
     init();
@@ -202,6 +211,7 @@ export default function ExamWorkspace({ onFinish }) {
             currentIndex={currentIndex}
             onJump={setCurrentIndex}
           />
+          {cameraOn && <CameraPreview />}
           <div className="palette monitor-panel">
             <h3 className="palette-title">Activity</h3>
             <MonitoringTimeline events={events} compact />
