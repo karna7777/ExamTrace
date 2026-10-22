@@ -21,6 +21,7 @@ import Placeholder from "./screens/Placeholder.jsx";
 import PreExam from "./screens/PreExam.jsx";
 import ExamWorkspace from "./screens/ExamWorkspace.jsx";
 import ExamResult from "./screens/ExamResult.jsx";
+import History from "./screens/History.jsx";
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -43,10 +44,16 @@ export default function App() {
 
   useEffect(() => {
     async function boot() {
-      // Renderer-reload recovery: if Main already has an exam in progress,
-      // restore the workspace before showing anything else.
+      // Recovery: if Main has an exam in progress (reload or relaunch), restore
+      // the workspace. Otherwise, if startup recovery finalized an attempt whose
+      // deadline passed while the app was closed, show that result.
       const active = await api.getActiveExam();
-      if (active) setExamFlow({ view: "workspace", exam: null, result: null });
+      if (active) {
+        setExamFlow({ view: "workspace", exam: null, result: null });
+      } else {
+        const recovered = await api.getRecoveredResult();
+        if (recovered) setExamFlow({ view: "result", exam: null, result: recovered });
+      }
       await refreshStatus();
       await loadExams();
     }
@@ -168,9 +175,8 @@ export default function App() {
         return <Settings isExaminer={isExaminer} />;
       case "History":
       case "My History":
-        return <Placeholder title="History" phase="Phase 5" />;
       case "My Reports":
-        return <Placeholder title="My Reports" phase="Phase 5" />;
+        return <History />;
       case "Analytics":
         return <Placeholder title="Analytics" phase="Phase 6" />;
       default:

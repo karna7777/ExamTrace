@@ -97,6 +97,10 @@ app.whenReady().then(() => {
 
   createMainWindow();
 
+  // Recover an unfinished attempt (or finalize it if its deadline passed while
+  // the app was closed). Runs after the window exists so monitoring can resume.
+  examSession.recoverOnStartup();
+
   // macOS: clicking the dock icon with no windows open should re-create one.
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

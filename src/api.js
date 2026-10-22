@@ -25,9 +25,12 @@ export const api = {
   // Examination engine (candidate)
   startExam: (examId, candidateName) => bridge.startExam(examId, candidateName),
   getActiveExam: () => bridge.getActiveExam(),
+  getRecoveredResult: () => bridge.getRecoveredResult(),
   saveAnswer: (questionId, answerIndex) => bridge.saveAnswer(questionId, answerIndex),
   markForReview: (questionId, marked) => bridge.markForReview(questionId, marked),
   submitExam: () => bridge.submitExam(),
+  getExamHistory: () => bridge.getExamHistory(),
+  getExamReport: (attemptId) => bridge.getExamReport(attemptId),
 
   // Settings
   getSettings: () => bridge.getSettings(),

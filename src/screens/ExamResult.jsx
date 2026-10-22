@@ -5,7 +5,7 @@ import React from "react";
 import { formatTime } from "../api.js";
 import MonitoringTimeline from "../components/MonitoringTimeline.jsx";
 
-export default function ExamResult({ result, onDone }) {
+export default function ExamResult({ result, onDone, embedded, backLabel }) {
   if (!result) {
     return (
       <div className="centered-screen muted">
@@ -17,7 +17,7 @@ export default function ExamResult({ result, onDone }) {
   const optionLetter = (i) => String.fromCharCode(65 + i); // 0 -> A
 
   return (
-    <div className="result-screen">
+    <div className={embedded ? "result-embedded" : "result-screen"}>
       <div className="result-inner">
         <header className="result-header">
           <div>
@@ -92,7 +92,7 @@ export default function ExamResult({ result, onDone }) {
 
         <div className="creator-actions">
           <button className="btn btn-primary" onClick={onDone}>
-            Back to Dashboard
+            {backLabel || "Back to Dashboard"}
           </button>
         </div>
       </div>

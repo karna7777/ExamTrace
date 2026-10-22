@@ -11,6 +11,7 @@ const authService = require("../services/authService.cjs");
 const examService = require("../services/examService.cjs");
 const settingsService = require("../services/settingsService.cjs");
 const examSession = require("../services/examSessionService.cjs");
+const attemptService = require("../services/attemptService.cjs");
 
 // True while a candidate examination is in progress. Examiner actions are
 // blocked during an active exam so the candidate can't reach editing controls.
@@ -116,9 +117,16 @@ function registerHandlers() {
     return examSession.startExam(examId, candidateName);
   });
 
-  // Returns the sanitized active attempt (no answer key) or null. Used for
-  // renderer-reload recovery.
-  ipcMain.handle("exam:getActive", () => examSession.getActiveExam());
+  // Returns the sanitized active attempt (no answer key) or null. Waits for
+  // startup recovery so a reload/relaunch sees the restored state.
+  ipcMain.handle("exam:getActive", () => examSession.getActiveExamAsync());
+
+  // A result produced by startup recovery (deadline passed while closed).
+  ipcMain.handle("exam:getRecoveredResult", () => examSession.getRecoveredResult());
+
+  // History + reports (finalized attempts; safe to expose answer keys here).
+  ipcMain.handle("exam:getHistory", () => attemptService.getHistory());
+  ipcMain.handle("exam:getReport", (event, attemptId) => attemptService.getReport(attemptId));
 
   ipcMain.handle("exam:saveAnswer", (event, questionId, answerIndex) => {
     return examSession.saveAnswer(questionId, answerIndex);

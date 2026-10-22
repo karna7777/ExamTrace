@@ -29,9 +29,12 @@ contextBridge.exposeInMainWorld("examTrace", {
   // --- Examination engine (candidate) ---
   startExam: (examId, candidateName) => ipcRenderer.invoke("exam:start", examId, candidateName),
   getActiveExam: () => ipcRenderer.invoke("exam:getActive"),
+  getRecoveredResult: () => ipcRenderer.invoke("exam:getRecoveredResult"),
   saveAnswer: (questionId, answerIndex) => ipcRenderer.invoke("exam:saveAnswer", questionId, answerIndex),
   markForReview: (questionId, marked) => ipcRenderer.invoke("exam:markReview", questionId, marked),
   submitExam: () => ipcRenderer.invoke("exam:submit"),
+  getExamHistory: () => ipcRenderer.invoke("exam:getHistory"),
+  getExamReport: (attemptId) => ipcRenderer.invoke("exam:getReport", attemptId),
 
   // --- Settings ---
   getSettings: () => ipcRenderer.invoke("settings:get"),

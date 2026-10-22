@@ -11,19 +11,45 @@
 //     stays correct through blur/minimize/reload and never resets.
 //   * Finalization (scoring) happens exactly once.
 //
-// NOTE: disk persistence of attempts (attempts.json / active-attempt.json) is
-// added in Phase 5. For Phase 3 the active attempt lives in Main memory, which
-// is enough for renderer-reload recovery.
+// Phase 5 adds persistence: an in-progress attempt is checkpointed to
+// active-attempt.json; finalized attempts go to attempts.json. On startup we
+// recover an unfinished attempt (or finalize it if its deadline passed while the
+// app was closed).
 
 const crypto = require("crypto");
 const examService = require("./examService.cjs");
 const settingsService = require("./settingsService.cjs");
 const monitoringService = require("./monitoringService.cjs");
+const attemptService = require("./attemptService.cjs");
 const windowRef = require("../windowRef.cjs");
 
 let activeAttempt = null; // the full attempt object (internal, includes answer key)
 let timerInterval = null;
 let starting = false; // synchronous lock to block simultaneous startExam calls
+
+// A result produced during startup recovery (deadline passed while closed),
+// surfaced to the renderer once via getRecoveredResult().
+let pendingRecoveredResult = null;
+
+// Resolves once startup recovery has finished, so the renderer never reads the
+// active-exam state before recovery decided what to restore.
+let resolveRecovery;
+const recoveryDone = new Promise((resolve) => {
+  resolveRecovery = resolve;
+});
+
+// Persist the current in-progress attempt (checkpoint). Fire-and-forget: the
+// storage write queue preserves order.
+function checkpoint() {
+  if (activeAttempt && activeAttempt.status === "in_progress") {
+    attemptService.saveCheckpoint(serializeAttempt(activeAttempt));
+  }
+}
+
+// A plain, JSON-safe copy of the attempt (drops nothing we need for recovery).
+function serializeAttempt(a) {
+  return JSON.parse(JSON.stringify(a));
+}
 
 function isExamActive() {
   return !!activeAttempt && activeAttempt.status === "in_progress";
@@ -106,8 +132,12 @@ async function startExam(examId, candidateName) {
     monitoringService.start(activeAttempt, {
       idleThresholdSeconds,
       fullscreenEnabled: settings.fullscreenDuringExam,
-      win: windowRef.getMainWindow()
+      win: windowRef.getMainWindow(),
+      onEvent: checkpoint // persist after each monitoring event
     });
+
+    // Initial checkpoint so the attempt survives a restart from the very start.
+    checkpoint();
 
     return getActiveExam();
   } finally {
@@ -137,6 +167,7 @@ function saveAnswer(questionId, answerIndex) {
     throw new Error("Invalid answer selection.");
   }
   activeAttempt.answers[questionId] = idx;
+  checkpoint(); // save after an answer change
   return { ok: true };
 }
 
@@ -150,6 +181,7 @@ function markForReview(questionId, marked) {
   const has = list.includes(questionId);
   if (marked && !has) list.push(questionId);
   if (!marked && has) activeAttempt.markedForReview = list.filter((id) => id !== questionId);
+  checkpoint(); // save after a review-flag change
   return { ok: true };
 }
 
@@ -209,9 +241,10 @@ function buildResult() {
 }
 
 // Finalize exactly once. submissionType is "manual" or "auto".
-function finalizeExam(submissionType) {
+// The status is set synchronously (before any await) so a concurrent call sees
+// it and returns the existing result - guaranteeing exactly-once scoring.
+async function finalizeExam(submissionType) {
   if (!activeAttempt) return null;
-  // Idempotent: if already finalized, just return the existing result.
   if (activeAttempt.status !== "in_progress") {
     return activeAttempt.result;
   }
@@ -223,17 +256,115 @@ function finalizeExam(submissionType) {
   // Stop monitoring: records the submit event, closes any open away/idle
   // interval, and returns the summary used in the report.
   activeAttempt.monitoringSummary = monitoringService.stop(submissionType);
-
   activeAttempt.result = buildResult();
 
-  // Notify the renderer that the exam is complete (covers auto-submit too).
+  // Notify the renderer immediately (covers auto-submit too).
   windowRef.sendToRenderer("exam:completed", activeAttempt.result);
+
+  // Persist in a recoverable order: write history FIRST, then clear the
+  // checkpoint. If a crash happens in between, the attempt is already in
+  // history and startup recovery just clears the leftover checkpoint
+  // (saveFinalizedAttempt is idempotent, so no duplicate is created).
+  try {
+    await attemptService.saveFinalizedAttempt(serializeAttempt(activeAttempt));
+    await attemptService.clearCheckpoint();
+  } catch (err) {
+    console.error("[ExamTrace] failed to persist finalized attempt:", err);
+  }
   return activeAttempt.result;
 }
 
 function submitExam() {
   if (!activeAttempt) throw new Error("No active examination.");
   return finalizeExam("manual");
+}
+
+// ---- Startup recovery ----
+function validCheckpoint(cp) {
+  return (
+    cp &&
+    typeof cp.id === "string" &&
+    cp.examSnapshot &&
+    Array.isArray(cp.examSnapshot.questions) &&
+    typeof cp.deadlineMs === "number" &&
+    typeof cp.startedAt === "string"
+  );
+}
+
+// Called once at startup (from main.cjs) after the window exists.
+async function recoverOnStartup() {
+  try {
+    const cp = await attemptService.readCheckpoint();
+    if (!cp) return;
+
+    // Already in history (crash happened after writing history but before the
+    // checkpoint was cleared): just remove the leftover checkpoint. No restore,
+    // no duplicate.
+    if (cp.id && (await attemptService.hasAttempt(cp.id))) {
+      await attemptService.clearCheckpoint();
+      return;
+    }
+
+    if (cp.status !== "in_progress") {
+      // Crash after finalize but before the checkpoint was cleared: make sure
+      // it's in history (idempotent) and clear the leftover checkpoint.
+      await attemptService.saveFinalizedAttempt(cp);
+      await attemptService.clearCheckpoint();
+      return;
+    }
+
+    if (!validCheckpoint(cp)) {
+      await attemptService.clearCheckpoint();
+      return;
+    }
+
+    if (Date.now() >= cp.deadlineMs) {
+      // Deadline passed while the app was closed: finalize exactly once.
+      // We do NOT fabricate monitoring events for the time the app was not
+      // running - we cannot observe what happened then.
+      activeAttempt = cp;
+      activeAttempt.status = "auto_submitted";
+      activeAttempt.endedAt = new Date(cp.deadlineMs).toISOString();
+      activeAttempt.monitoringSummary = monitoringService.computeSummaryFromEvents(cp.events);
+      activeAttempt.result = buildResult();
+      pendingRecoveredResult = activeAttempt.result;
+      await attemptService.saveFinalizedAttempt(serializeAttempt(activeAttempt));
+      await attemptService.clearCheckpoint();
+      activeAttempt = null;
+      return;
+    }
+
+    // Still valid and running: restore it and resume the timer + monitoring.
+    activeAttempt = cp;
+    startTimer();
+    const settings = await settingsService.getSettings();
+    const idleThresholdSeconds = settings.demoMode ? 10 : settings.inactivityThresholdSeconds;
+    monitoringService.start(activeAttempt, {
+      idleThresholdSeconds,
+      fullscreenEnabled: settings.fullscreenDuringExam,
+      win: windowRef.getMainWindow(),
+      onEvent: checkpoint,
+      isResume: true // seed counters from existing events, no duplicate EXAM_STARTED
+    });
+  } catch (err) {
+    console.error("[ExamTrace] recovery error:", err);
+  } finally {
+    resolveRecovery();
+  }
+}
+
+// Renderer waits for recovery before reading the active-exam state.
+async function getActiveExamAsync() {
+  await recoveryDone;
+  return getActiveExam();
+}
+
+// Returns (once) a result produced during startup recovery, then clears it.
+async function getRecoveredResult() {
+  await recoveryDone;
+  const r = pendingRecoveredResult;
+  pendingRecoveredResult = null;
+  return r;
 }
 
 // ---- Authoritative timer (Main process) ----
@@ -269,6 +400,9 @@ module.exports = {
   isExamActive,
   startExam,
   getActiveExam,
+  getActiveExamAsync,
+  getRecoveredResult,
+  recoverOnStartup,
   saveAnswer,
   markForReview,
   submitExam

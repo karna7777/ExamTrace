@@ -27,6 +27,7 @@ function makeInitialState(attempt, options) {
     idleThresholdSeconds: options.idleThresholdSeconds,
     fullscreenForced: !!options.fullscreenEnabled,
     win: options.win,
+    onEvent: typeof options.onEvent === "function" ? options.onEvent : null,
 
     // window focus/departure tracking (one interval regardless of blur+minimize)
     isAway: false,
@@ -63,6 +64,30 @@ function recordEvent(type, reason, metadata) {
   };
   state.attempt.events.push(event);
   windowRef.sendToRenderer("monitoring:event", event);
+  // Let the session persist a checkpoint after each monitoring event.
+  if (state.onEvent) state.onEvent(event);
+}
+
+// Rebuild summary counters from an event list. Used when resuming after a
+// restart (we can't recover live counters) and when finalizing on recovery.
+// Relies on the dedup rule: one WINDOW_BLUR/WINDOW_MINIMIZED per departure.
+function computeSummaryFromEvents(events) {
+  const list = Array.isArray(events) ? events : [];
+  const count = (t) => list.filter((e) => e.type === t).length;
+  const sumMeta = (types, key) =>
+    list
+      .filter((e) => types.includes(e.type))
+      .reduce((acc, e) => acc + ((e.metadata && e.metadata[key]) || 0), 0);
+  return {
+    windowDepartures: count("WINDOW_BLUR") + count("WINDOW_MINIMIZED"),
+    totalAwayMs: sumMeta(["WINDOW_FOCUS", "WINDOW_RESTORED"], "awayMs"),
+    fullscreenExits: count("FULLSCREEN_EXIT"),
+    idleEvents: count("SYSTEM_IDLE"),
+    totalIdleMs: sumMeta(["SYSTEM_ACTIVE"], "idleMs"),
+    lockEvents: count("SYSTEM_LOCKED"),
+    suspendEvents: count("SYSTEM_SUSPENDED"),
+    totalEvents: list.length
+  };
 }
 
 // ---- Window focus / departure (deduplicated into one interval) ----
@@ -121,9 +146,22 @@ function start(attempt, options) {
   const win = options.win;
   state = makeInitialState(attempt, options);
 
-  recordEvent("EXAM_STARTED", "Examination started", {
-    candidateName: attempt.candidateName
-  });
+  if (options.isResume) {
+    // Resuming after a restart: seed counters from the events already recorded,
+    // and do NOT record another EXAM_STARTED.
+    const seed = computeSummaryFromEvents(attempt.events);
+    state.windowDepartures = seed.windowDepartures;
+    state.totalAwayMs = seed.totalAwayMs;
+    state.fullscreenExits = seed.fullscreenExits;
+    state.idleEvents = seed.idleEvents;
+    state.totalIdleMs = seed.totalIdleMs;
+    state.lockEvents = seed.lockEvents;
+    state.suspendEvents = seed.suspendEvents;
+  } else {
+    recordEvent("EXAM_STARTED", "Examination started", {
+      candidateName: attempt.candidateName
+    });
+  }
 
   // Optionally enter fullscreen for the exam.
   if (state.fullscreenForced && win && !win.isDestroyed()) {
@@ -244,4 +282,4 @@ function getStatus() {
   return { active: true, awayNow: state.isAway, idleNow: state.isIdle };
 }
 
-module.exports = { start, stop, getStatus };
+module.exports = { start, stop, getStatus, computeSummaryFromEvents };

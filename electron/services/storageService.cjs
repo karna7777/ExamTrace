@@ -81,4 +81,24 @@ function writeJson(name, data) {
   return next;
 }
 
-module.exports = { filePath, fileExists, readJson, writeJson };
+// Queued delete (on the same per-file chain as writes, so a delete can't race a
+// pending write). A missing file is not an error.
+function deleteJson(name) {
+  const runDelete = async () => {
+    try {
+      await fsp.unlink(filePath(name));
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+    return true;
+  };
+  const previous = writeChains.get(name) || Promise.resolve();
+  const next = previous.then(runDelete, runDelete);
+  writeChains.set(
+    name,
+    next.catch(() => {})
+  );
+  return next;
+}
+
+module.exports = { filePath, fileExists, readJson, writeJson, deleteJson };
