@@ -17,6 +17,7 @@
 // app was closed).
 
 const crypto = require("crypto");
+const { Notification } = require("electron");
 const examService = require("./examService.cjs");
 const settingsService = require("./settingsService.cjs");
 const monitoringService = require("./monitoringService.cjs");
@@ -261,6 +262,9 @@ async function finalizeExam(submissionType) {
   // Notify the renderer immediately (covers auto-submit too).
   windowRef.sendToRenderer("exam:completed", activeAttempt.result);
 
+  // Native desktop notification for submission / time expiry.
+  showCompletionNotification(activeAttempt.result);
+
   // Persist in a recoverable order: write history FIRST, then clear the
   // checkpoint. If a crash happens in between, the attempt is already in
   // history and startup recovery just clears the leftover checkpoint
@@ -277,6 +281,19 @@ async function finalizeExam(submissionType) {
 function submitExam() {
   if (!activeAttempt) throw new Error("No active examination.");
   return finalizeExam("manual");
+}
+
+// Show a native OS notification when an exam ends.
+function showCompletionNotification(result) {
+  try {
+    if (!Notification.isSupported()) return;
+    const title = result.submissionType === "auto" ? "Time expired" : "Examination submitted";
+    const body =
+      result.title + " - " + result.score + "/" + result.totalQuestions + " (" + result.percentage + "%)";
+    new Notification({ title: "ExamTrace: " + title, body }).show();
+  } catch (err) {
+    console.error("[ExamTrace] notification error:", err);
+  }
 }
 
 // ---- Startup recovery ----

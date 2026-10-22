@@ -22,6 +22,15 @@ import PreExam from "./screens/PreExam.jsx";
 import ExamWorkspace from "./screens/ExamWorkspace.jsx";
 import ExamResult from "./screens/ExamResult.jsx";
 import History from "./screens/History.jsx";
+import Analytics from "./screens/Analytics.jsx";
+
+// Apply the chosen theme. "system" removes the attribute so the OS setting (via
+// a CSS media query) decides; "light"/"dark" force it.
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
+  else root.removeAttribute("data-theme");
+}
 
 export default function App() {
   const [status, setStatus] = useState(null);
@@ -31,6 +40,7 @@ export default function App() {
   const [showUnlock, setShowUnlock] = useState(false);
   // examFlow.view: "none" | "preexam" | "workspace" | "result"
   const [examFlow, setExamFlow] = useState({ view: "none", exam: null, result: null });
+  const [settings, setSettings] = useState(null);
 
   async function refreshStatus() {
     const s = await api.getExaminerStatus();
@@ -41,6 +51,17 @@ export default function App() {
     const list = await api.getAvailableExams();
     setExams(list);
   }
+  async function loadSettings() {
+    const st = await api.getSettings();
+    setSettings(st);
+    applyTheme(st.theme);
+    return st;
+  }
+
+  // Re-apply the theme whenever settings change.
+  useEffect(() => {
+    if (settings) applyTheme(settings.theme);
+  }, [settings]);
 
   useEffect(() => {
     async function boot() {
@@ -54,6 +75,7 @@ export default function App() {
         const recovered = await api.getRecoveredResult();
         if (recovered) setExamFlow({ view: "result", exam: null, result: recovered });
       }
+      await loadSettings();
       await refreshStatus();
       await loadExams();
     }
@@ -172,13 +194,19 @@ export default function App() {
       case "Manage Exams":
         return <ManageExams exams={exams} onEdit={startEdit} onDelete={handleDelete} onCreate={startCreate} />;
       case "Settings":
-        return <Settings isExaminer={isExaminer} />;
+        return (
+          <Settings
+            isExaminer={isExaminer}
+            settings={settings}
+            onSettingsChanged={(updated) => setSettings(updated)}
+          />
+        );
       case "History":
       case "My History":
       case "My Reports":
         return <History />;
       case "Analytics":
-        return <Placeholder title="Analytics" phase="Phase 6" />;
+        return <Analytics />;
       default:
         return <Placeholder title={activeNav} phase="a later phase" />;
     }

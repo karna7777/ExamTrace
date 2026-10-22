@@ -20,6 +20,15 @@ export default function CreateExam({ examId, onSaved, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(!!examId);
 
+  // For a new exam, default the duration to the examiner's configured default.
+  useEffect(() => {
+    if (examId) return;
+    api
+      .getSettings()
+      .then((s) => setDurationMinutes(s.defaultDurationMinutes))
+      .catch(() => {});
+  }, [examId]);
+
   // If editing, load the full exam (including answer key) from Main.
   useEffect(() => {
     if (!examId) return;

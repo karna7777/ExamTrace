@@ -1,21 +1,31 @@
-// Dashboard. Candidate Mode shows available exams and a simple summary.
-// Examiner Mode shows management stats plus the same exam cards with
-// Edit/Delete controls. All numbers come from real data (no fake stats).
-import React from "react";
+// Dashboard. Candidate Mode shows available exams and a simple real summary.
+// Examiner Mode shows real management stats plus the same exam cards with
+// Edit/Delete. All numbers come from saved attempts (no fake stats).
+import React, { useEffect, useState } from "react";
 import ExamCard from "../components/ExamCard.jsx";
+import { api } from "../api.js";
 
 export default function Dashboard({ isExaminer, exams, onStart, onEdit, onDelete, onCreate }) {
   const hasExams = exams.length > 0;
+  const [attempts, setAttempts] = useState([]);
+
+  useEffect(() => {
+    api
+      .getExamHistory()
+      .then(setAttempts)
+      .catch(() => setAttempts([]));
+  }, []);
+
+  const total = attempts.length;
+  const avg = total > 0 ? Math.round(attempts.reduce((s, a) => s + a.percentage, 0) / total) : null;
 
   return (
     <div>
-      {isExaminer && (
-        <div className="stat-row">
-          <StatCard label="Total exams" value={exams.length} />
-          <StatCard label="Total attempts" value={0} hint="Recorded in Phase 5" />
-          <StatCard label="Average score" value="—" hint="No attempts yet" />
-        </div>
-      )}
+      <div className="stat-row">
+        <StatCard label={isExaminer ? "Total exams" : "Exams available"} value={exams.length} />
+        <StatCard label="Attempts" value={total} />
+        <StatCard label="Average score" value={avg === null ? "—" : avg + "%"} hint={total === 0 ? "No attempts yet" : null} />
+      </div>
 
       <div className="section-head">
         <h2>{isExaminer ? "Your exams" : "Available examinations"}</h2>
