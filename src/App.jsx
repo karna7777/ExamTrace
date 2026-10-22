@@ -1,118 +1,180 @@
-// Top-level ExamTrace component.
+// Top-level ExamTrace component (Phase 2).
 //
-// Phase 1 only builds the application "shell": a sidebar with branding and
-// placeholder navigation, a mode indicator, and a small panel that proves the
-// secure IPC bridge to the Electron Main process works (ping + app info).
+// Decides which high-level screen to show based on examiner status from Main:
+//   - recovery error (auth file missing but other data present)
+//   - first-run examiner setup
+//   - the main app (Candidate Mode by default, Examiner Mode when unlocked)
 //
-// Real screens (Dashboard, Exam Creator, Workspace, etc.) and real examiner
-// authentication are added in later phases.
+// Candidate Mode and Examiner Mode show different sidebars and screens. All
+// authorization is enforced in Main; the UI only reflects the current state.
 
 import React, { useEffect, useState } from "react";
 import { api } from "./api.js";
-
-// Candidate Mode is the default whenever the app launches.
-const CANDIDATE_NAV = ["Dashboard", "My History", "My Reports", "Settings"];
+import Sidebar from "./components/Sidebar.jsx";
+import ExaminerUnlockModal from "./components/ExaminerUnlockModal.jsx";
+import ExaminerSetup from "./screens/ExaminerSetup.jsx";
+import RecoveryError from "./screens/RecoveryError.jsx";
+import Dashboard from "./screens/Dashboard.jsx";
+import CreateExam from "./screens/CreateExam.jsx";
+import ManageExams from "./screens/ManageExams.jsx";
+import Settings from "./screens/Settings.jsx";
+import Placeholder from "./screens/Placeholder.jsx";
 
 export default function App() {
+  const [status, setStatus] = useState(null); // null while loading
+  const [exams, setExams] = useState([]);
   const [activeNav, setActiveNav] = useState("Dashboard");
-  const [pingResult, setPingResult] = useState("(not called yet)");
-  const [appInfo, setAppInfo] = useState(null);
-  const [ipcError, setIpcError] = useState(null);
+  const [editingExamId, setEditingExamId] = useState(null);
+  const [showUnlock, setShowUnlock] = useState(false);
 
-  // On mount, exercise the IPC bridge so we can visually confirm that the
-  // Renderer can talk to the Main process.
+  async function refreshStatus() {
+    const s = await api.getExaminerStatus();
+    setStatus(s);
+    return s;
+  }
+
+  async function loadExams() {
+    const list = await api.getAvailableExams();
+    setExams(list);
+  }
+
   useEffect(() => {
-    async function checkBridge() {
-      try {
-        const pong = await api.ping();
-        setPingResult(pong);
-        const info = await api.getAppInfo();
-        setAppInfo(info);
-      } catch (error) {
-        setIpcError(String(error));
-      }
-    }
-    checkBridge();
+    refreshStatus();
+    loadExams();
   }, []);
+
+  // ---- Loading / special screens ----
+  if (status === null) {
+    return <div className="centered-screen muted">Loading ExamTrace...</div>;
+  }
+  if (status.recovery) {
+    return <RecoveryError />;
+  }
+  if (!status.configured) {
+    return (
+      <ExaminerSetup
+        onComplete={async () => {
+          await refreshStatus();
+          await loadExams();
+        }}
+      />
+    );
+  }
+
+  const isExaminer = status.unlocked;
+
+  // ---- Examiner lock / unlock ----
+  async function handleExaminerAction(action) {
+    if (action === "unlock") {
+      setShowUnlock(true);
+    } else if (action === "lock") {
+      await api.lockExaminer();
+      await refreshStatus();
+      setActiveNav("Dashboard");
+      setEditingExamId(null);
+    }
+  }
+
+  function navigate(item) {
+    setEditingExamId(null);
+    setActiveNav(item);
+  }
+
+  // ---- Exam management handlers ----
+  function startCreate() {
+    setEditingExamId(null);
+    setActiveNav("Create Exam");
+  }
+  function startEdit(exam) {
+    setEditingExamId(exam.id);
+    setActiveNav("Create Exam");
+  }
+  async function handleDelete(exam) {
+    const result = await api.deleteExam(exam.id);
+    if (result && result.ok) {
+      await loadExams();
+    }
+  }
+  async function afterSaved() {
+    await loadExams();
+    setEditingExamId(null);
+    setActiveNav("Manage Exams");
+  }
+
+  // ---- Screen router ----
+  function renderScreen() {
+    switch (activeNav) {
+      case "Dashboard":
+        return (
+          <Dashboard
+            isExaminer={isExaminer}
+            exams={exams}
+            onEdit={startEdit}
+            onDelete={handleDelete}
+            onCreate={startCreate}
+          />
+        );
+      case "Create Exam":
+        return (
+          <CreateExam
+            examId={editingExamId}
+            onSaved={afterSaved}
+            onCancel={() => navigate("Manage Exams")}
+          />
+        );
+      case "Manage Exams":
+        return (
+          <ManageExams
+            exams={exams}
+            onEdit={startEdit}
+            onDelete={handleDelete}
+            onCreate={startCreate}
+          />
+        );
+      case "Settings":
+        return <Settings isExaminer={isExaminer} />;
+      case "History":
+      case "My History":
+        return <Placeholder title="History" phase="Phase 5" />;
+      case "My Reports":
+        return <Placeholder title="My Reports" phase="Phase 5" />;
+      case "Analytics":
+        return <Placeholder title="Analytics" phase="Phase 6" />;
+      default:
+        return <Placeholder title={activeNav} phase="a later phase" />;
+    }
+  }
+
+  const headerTitle =
+    activeNav === "Create Exam" ? (editingExamId ? "Edit Exam" : "Create Exam") : activeNav;
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">ET</span>
-          <span className="brand-name">ExamTrace</span>
-        </div>
-
-        <nav className="nav">
-          {CANDIDATE_NAV.map((item) => (
-            <button
-              key={item}
-              className={"nav-item" + (activeNav === item ? " active" : "")}
-              onClick={() => setActiveNav(item)}
-            >
-              {item}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <button className="examiner-btn" disabled title="Examiner authentication arrives in Phase 2">
-            Examiner Mode
-          </button>
-          <p className="mode-note">Candidate Mode (default)</p>
-        </div>
-      </aside>
+      <Sidebar
+        isExaminer={isExaminer}
+        active={activeNav}
+        onNavigate={navigate}
+        onExaminerAction={handleExaminerAction}
+      />
 
       <main className="workspace">
         <header className="workspace-header">
-          <h1>{activeNav}</h1>
-          <span className="phase-tag">Phase 1 - Foundation</span>
+          <h1>{headerTitle}</h1>
+          <span className="phase-tag">{isExaminer ? "Examiner Mode" : "Candidate Mode"}</span>
         </header>
-
-        <section className="panel">
-          <h2>Welcome to ExamTrace</h2>
-          <p className="muted">
-            Smart Desktop Examination &amp; Activity Monitoring System. This is the
-            application shell. Examinations, monitoring and examiner tools are added in
-            the next phases.
-          </p>
-        </section>
-
-        <section className="panel">
-          <h2>IPC Bridge Check</h2>
-          <p className="muted">
-            Proves the React renderer can talk to the Electron Main process through the
-            secure preload bridge.
-          </p>
-
-          {ipcError ? (
-            <p className="status error">IPC error: {ipcError}</p>
-          ) : (
-            <ul className="info-list">
-              <li>
-                <span className="label">ping() returned</span>
-                <span className="value">{pingResult}</span>
-              </li>
-              <li>
-                <span className="label">Product name</span>
-                <span className="value">{appInfo ? appInfo.productName : "..."}</span>
-              </li>
-              <li>
-                <span className="label">Version</span>
-                <span className="value">{appInfo ? appInfo.version : "..."}</span>
-              </li>
-              <li>
-                <span className="label">Platform</span>
-                <span className="value">{appInfo ? appInfo.platform : "..."}</span>
-              </li>
-              <li>
-                <span className="label">User data path</span>
-                <span className="value mono">{appInfo ? appInfo.userDataPath : "..."}</span>
-              </li>
-            </ul>
-          )}
-        </section>
+        {renderScreen()}
       </main>
+
+      {showUnlock && (
+        <ExaminerUnlockModal
+          onClose={() => setShowUnlock(false)}
+          onUnlocked={async () => {
+            setShowUnlock(false);
+            await refreshStatus();
+            setActiveNav("Dashboard");
+          }}
+        />
+      )}
     </div>
   );
 }
