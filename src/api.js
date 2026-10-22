@@ -35,8 +35,41 @@ export const api = {
 
   // Events (return a cleanup function)
   onTimerUpdate: (cb) => bridge.onTimerUpdate(cb),
-  onExamCompleted: (cb) => bridge.onExamCompleted(cb)
+  onExamCompleted: (cb) => bridge.onExamCompleted(cb),
+  onMonitoringEvent: (cb) => bridge.onMonitoringEvent(cb)
 };
+
+// Human-friendly label + classification for a monitoring event type. Neutral
+// wording only - we never call anything "cheating".
+export function describeEvent(type) {
+  const map = {
+    EXAM_STARTED: { label: "Examination started", kind: "info" },
+    WINDOW_BLUR: { label: "Window lost focus", kind: "activity" },
+    WINDOW_FOCUS: { label: "Window regained focus", kind: "activity" },
+    WINDOW_MINIMIZED: { label: "Window minimized", kind: "activity" },
+    WINDOW_RESTORED: { label: "Window restored", kind: "activity" },
+    FULLSCREEN_ENTER: { label: "Entered fullscreen", kind: "info" },
+    FULLSCREEN_EXIT: { label: "Left fullscreen", kind: "policy" },
+    SYSTEM_IDLE: { label: "System inactivity detected", kind: "activity" },
+    SYSTEM_ACTIVE: { label: "Activity resumed", kind: "activity" },
+    SYSTEM_LOCKED: { label: "Screen locked", kind: "policy" },
+    SYSTEM_UNLOCKED: { label: "Screen unlocked", kind: "activity" },
+    SYSTEM_SUSPENDED: { label: "System suspended", kind: "policy" },
+    SYSTEM_RESUMED: { label: "System resumed", kind: "activity" },
+    EXAM_SUBMITTED: { label: "Examination submitted", kind: "info" },
+    EXAM_AUTO_SUBMITTED: { label: "Auto-submitted (time expired)", kind: "info" }
+  };
+  return map[type] || { label: type, kind: "info" };
+}
+
+// Format a timestamp as a local HH:MM:SS clock time.
+export function formatClock(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString();
+  } catch {
+    return iso;
+  }
+}
 
 // Format milliseconds as HH:MM:SS (or MM:SS when under an hour).
 export function formatTime(ms) {

@@ -48,5 +48,10 @@ contextBridge.exposeInMainWorld("examTrace", {
     const listener = (event, payload) => callback(payload);
     ipcRenderer.on("exam:completed", listener);
     return () => ipcRenderer.removeListener("exam:completed", listener);
+  },
+  onMonitoringEvent: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on("monitoring:event", listener);
+    return () => ipcRenderer.removeListener("monitoring:event", listener);
   }
 });

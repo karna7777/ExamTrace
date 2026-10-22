@@ -17,6 +17,8 @@
 
 const crypto = require("crypto");
 const examService = require("./examService.cjs");
+const settingsService = require("./settingsService.cjs");
+const monitoringService = require("./monitoringService.cjs");
 const windowRef = require("../windowRef.cjs");
 
 let activeAttempt = null; // the full attempt object (internal, includes answer key)
@@ -52,7 +54,8 @@ function getActiveExam() {
     questions: getPublicQuestions(a.examSnapshot.questions),
     answers: a.answers,
     markedForReview: a.markedForReview,
-    monitoring: { active: false } // real monitoring status arrives in Phase 4
+    events: a.events,
+    monitoring: monitoringService.getStatus()
   };
 }
 
@@ -94,6 +97,18 @@ async function startExam(examId, candidateName) {
     };
 
     startTimer();
+
+    // Start desktop activity monitoring tied to this attempt. The idle
+    // threshold comes from settings (10s in Demo Mode, otherwise the normal
+    // threshold). Fullscreen during the exam is a setting too.
+    const settings = await settingsService.getSettings();
+    const idleThresholdSeconds = settings.demoMode ? 10 : settings.inactivityThresholdSeconds;
+    monitoringService.start(activeAttempt, {
+      idleThresholdSeconds,
+      fullscreenEnabled: settings.fullscreenDuringExam,
+      win: windowRef.getMainWindow()
+    });
+
     return getActiveExam();
   } finally {
     starting = false;
@@ -187,7 +202,9 @@ function buildResult() {
     score: correct,
     percentage: total > 0 ? Math.round((correct / total) * 100) : 0,
     timeUsedMs: Math.max(0, endedMs - startedMs),
-    review
+    review,
+    events: a.events,
+    monitoringSummary: a.monitoringSummary || null
   };
 }
 
@@ -202,6 +219,11 @@ function finalizeExam(submissionType) {
   stopTimer();
   activeAttempt.status = submissionType === "auto" ? "auto_submitted" : "submitted";
   activeAttempt.endedAt = new Date().toISOString();
+
+  // Stop monitoring: records the submit event, closes any open away/idle
+  // interval, and returns the summary used in the report.
+  activeAttempt.monitoringSummary = monitoringService.stop(submissionType);
+
   activeAttempt.result = buildResult();
 
   // Notify the renderer that the exam is complete (covers auto-submit too).

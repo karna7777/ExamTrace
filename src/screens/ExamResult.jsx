@@ -3,6 +3,7 @@
 // after finalization.
 import React from "react";
 import { formatTime } from "../api.js";
+import MonitoringTimeline from "../components/MonitoringTimeline.jsx";
 
 export default function ExamResult({ result, onDone }) {
   if (!result) {
@@ -37,6 +38,26 @@ export default function ExamResult({ result, onDone }) {
           <Stat label="Incorrect" value={result.incorrect} />
           <Stat label="Unanswered" value={result.unanswered} />
           <Stat label="Time used" value={formatTime(result.timeUsedMs)} />
+        </div>
+
+        {result.monitoringSummary && (
+          <>
+            <h2 className="section-title">Monitoring summary</h2>
+            <div className="stat-row">
+              <Stat label="Window departures" value={result.monitoringSummary.windowDepartures} />
+              <Stat label="Time away" value={formatTime(result.monitoringSummary.totalAwayMs)} />
+              <Stat label="Fullscreen exits" value={result.monitoringSummary.fullscreenExits} />
+              <Stat label="Inactivity events" value={result.monitoringSummary.idleEvents} />
+            </div>
+            <p className="fine-print">
+              These are recorded activity facts for review. They do not prove misconduct.
+            </p>
+          </>
+        )}
+
+        <h2 className="section-title">Activity timeline</h2>
+        <div className="review-item">
+          <MonitoringTimeline events={result.events} />
         </div>
 
         <h2 className="section-title">Answer review</h2>
