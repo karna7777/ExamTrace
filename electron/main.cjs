@@ -6,9 +6,11 @@
 // file persistence. The React UI runs in a separate Renderer process and
 // talks to Main only through secure IPC exposed by the preload script.
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog } = require("electron");
 const path = require("path");
 const { registerHandlers } = require("./ipc/handlers.cjs");
+const windowRef = require("./windowRef.cjs");
+const examSession = require("./services/examSessionService.cjs");
 
 // IMPORTANT: set the application name BEFORE anything reads app.getPath().
 // This guarantees our user data lives in:
@@ -52,6 +54,31 @@ function createMainWindow() {
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
+  });
+
+  // Let Main services push events (timer ticks, completion) to this window.
+  windowRef.setMainWindow(mainWindow);
+
+  // Basic close-window behaviour during an active exam. Full crash/restart
+  // recovery (saving a checkpoint) arrives in Phase 5; for now we at least warn
+  // the candidate so the attempt is not lost silently.
+  mainWindow.on("close", (e) => {
+    if (examSession.isExamActive()) {
+      e.preventDefault();
+      const choice = dialog.showMessageBoxSync(mainWindow, {
+        type: "warning",
+        buttons: ["Keep taking exam", "Close anyway"],
+        defaultId: 0,
+        cancelId: 0,
+        message: "An examination is in progress.",
+        detail:
+          "If you close now, the current attempt will be lost. " +
+          "Automatic save and restart recovery are added in a later version."
+      });
+      if (choice === 1) {
+        mainWindow.destroy(); // allow the close without re-triggering this handler
+      }
+    }
   });
 
   mainWindow.on("closed", () => {

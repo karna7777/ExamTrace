@@ -10,10 +10,12 @@ const { app, ipcMain, BrowserWindow, dialog } = require("electron");
 const authService = require("../services/authService.cjs");
 const examService = require("../services/examService.cjs");
 const settingsService = require("../services/settingsService.cjs");
+const examSession = require("../services/examSessionService.cjs");
 
-// Placeholder until Phase 3 adds the exam engine. No exam can be active yet.
+// True while a candidate examination is in progress. Examiner actions are
+// blocked during an active exam so the candidate can't reach editing controls.
 function isExamActive() {
-  return false;
+  return examSession.isExamActive();
 }
 
 // Guard for every examiner-only operation: must be unlocked AND no active exam.
@@ -106,6 +108,27 @@ function registerHandlers() {
     }
     return examService.deleteExam(examId);
   });
+
+  // ---- Examination engine (candidate-facing) ----
+  // startExam(examId, candidateName) - Main validates the name and guards
+  // against a second attempt.
+  ipcMain.handle("exam:start", (event, examId, candidateName) => {
+    return examSession.startExam(examId, candidateName);
+  });
+
+  // Returns the sanitized active attempt (no answer key) or null. Used for
+  // renderer-reload recovery.
+  ipcMain.handle("exam:getActive", () => examSession.getActiveExam());
+
+  ipcMain.handle("exam:saveAnswer", (event, questionId, answerIndex) => {
+    return examSession.saveAnswer(questionId, answerIndex);
+  });
+
+  ipcMain.handle("exam:markReview", (event, questionId, marked) => {
+    return examSession.markForReview(questionId, marked);
+  });
+
+  ipcMain.handle("exam:submit", () => examSession.submitExam());
 
   // ---- Settings ----
   ipcMain.handle("settings:get", () => settingsService.getSettings());

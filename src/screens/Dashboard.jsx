@@ -4,7 +4,7 @@
 import React from "react";
 import ExamCard from "../components/ExamCard.jsx";
 
-export default function Dashboard({ isExaminer, exams, onEdit, onDelete, onCreate }) {
+export default function Dashboard({ isExaminer, exams, onStart, onEdit, onDelete, onCreate }) {
   const hasExams = exams.length > 0;
 
   return (
@@ -42,7 +42,7 @@ export default function Dashboard({ isExaminer, exams, onEdit, onDelete, onCreat
               key={exam.id}
               exam={exam}
               isExaminer={isExaminer}
-              onStart={null /* exam engine arrives in Phase 3 */}
+              onStart={onStart}
               onEdit={onEdit}
               onDelete={onDelete}
             />

@@ -26,7 +26,27 @@ contextBridge.exposeInMainWorld("examTrace", {
   saveExam: (exam) => ipcRenderer.invoke("exam:save", exam),
   deleteExam: (examId) => ipcRenderer.invoke("exam:delete", examId),
 
+  // --- Examination engine (candidate) ---
+  startExam: (examId, candidateName) => ipcRenderer.invoke("exam:start", examId, candidateName),
+  getActiveExam: () => ipcRenderer.invoke("exam:getActive"),
+  saveAnswer: (questionId, answerIndex) => ipcRenderer.invoke("exam:saveAnswer", questionId, answerIndex),
+  markForReview: (questionId, marked) => ipcRenderer.invoke("exam:markReview", questionId, marked),
+  submitExam: () => ipcRenderer.invoke("exam:submit"),
+
   // --- Settings ---
   getSettings: () => ipcRenderer.invoke("settings:get"),
-  saveSettings: (patch) => ipcRenderer.invoke("settings:save", patch)
+  saveSettings: (patch) => ipcRenderer.invoke("settings:save", patch),
+
+  // --- Events (Main -> Renderer). Each returns a cleanup function that the
+  //     React component must call on unmount to remove the listener. ---
+  onTimerUpdate: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on("timer:update", listener);
+    return () => ipcRenderer.removeListener("timer:update", listener);
+  },
+  onExamCompleted: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on("exam:completed", listener);
+    return () => ipcRenderer.removeListener("exam:completed", listener);
+  }
 });

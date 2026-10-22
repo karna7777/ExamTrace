@@ -1,12 +1,11 @@
-// Top-level ExamTrace component (Phase 2).
+// Top-level ExamTrace component (Phase 3).
 //
-// Decides which high-level screen to show based on examiner status from Main:
-//   - recovery error (auth file missing but other data present)
-//   - first-run examiner setup
-//   - the main app (Candidate Mode by default, Examiner Mode when unlocked)
-//
-// Candidate Mode and Examiner Mode show different sidebars and screens. All
-// authorization is enforced in Main; the UI only reflects the current state.
+// Adds the examination flow on top of the Phase 2 shell:
+//   - Pre-exam screen (candidate name + monitoring disclosure)
+//   - Full-screen exam workspace (sidebar hidden)
+//   - Result screen
+// Plus renderer-reload recovery: on mount we ask Main whether an exam is
+// already in progress and, if so, go straight back into the workspace.
 
 import React, { useEffect, useState } from "react";
 import { api } from "./api.js";
@@ -19,29 +18,75 @@ import CreateExam from "./screens/CreateExam.jsx";
 import ManageExams from "./screens/ManageExams.jsx";
 import Settings from "./screens/Settings.jsx";
 import Placeholder from "./screens/Placeholder.jsx";
+import PreExam from "./screens/PreExam.jsx";
+import ExamWorkspace from "./screens/ExamWorkspace.jsx";
+import ExamResult from "./screens/ExamResult.jsx";
 
 export default function App() {
-  const [status, setStatus] = useState(null); // null while loading
+  const [status, setStatus] = useState(null);
   const [exams, setExams] = useState([]);
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [editingExamId, setEditingExamId] = useState(null);
   const [showUnlock, setShowUnlock] = useState(false);
+  // examFlow.view: "none" | "preexam" | "workspace" | "result"
+  const [examFlow, setExamFlow] = useState({ view: "none", exam: null, result: null });
 
   async function refreshStatus() {
     const s = await api.getExaminerStatus();
     setStatus(s);
     return s;
   }
-
   async function loadExams() {
     const list = await api.getAvailableExams();
     setExams(list);
   }
 
   useEffect(() => {
-    refreshStatus();
-    loadExams();
+    async function boot() {
+      // Renderer-reload recovery: if Main already has an exam in progress,
+      // restore the workspace before showing anything else.
+      const active = await api.getActiveExam();
+      if (active) setExamFlow({ view: "workspace", exam: null, result: null });
+      await refreshStatus();
+      await loadExams();
+    }
+    boot();
   }, []);
+
+  // ---- Full-screen exam flow takes priority over everything ----
+  if (examFlow.view === "preexam") {
+    return (
+      <PreExam
+        exam={examFlow.exam}
+        onStarted={() => setExamFlow({ view: "workspace", exam: null, result: null })}
+        onCancel={() => setExamFlow({ view: "none", exam: null, result: null })}
+      />
+    );
+  }
+  if (examFlow.view === "workspace") {
+    return (
+      <ExamWorkspace
+        onFinish={(result) => {
+          if (result) setExamFlow({ view: "result", exam: null, result });
+          else {
+            setExamFlow({ view: "none", exam: null, result: null });
+            loadExams();
+          }
+        }}
+      />
+    );
+  }
+  if (examFlow.view === "result") {
+    return (
+      <ExamResult
+        result={examFlow.result}
+        onDone={() => {
+          setExamFlow({ view: "none", exam: null, result: null });
+          loadExams();
+        }}
+      />
+    );
+  }
 
   // ---- Loading / special screens ----
   if (status === null) {
@@ -63,7 +108,6 @@ export default function App() {
 
   const isExaminer = status.unlocked;
 
-  // ---- Examiner lock / unlock ----
   async function handleExaminerAction(action) {
     if (action === "unlock") {
       setShowUnlock(true);
@@ -80,7 +124,6 @@ export default function App() {
     setActiveNav(item);
   }
 
-  // ---- Exam management handlers ----
   function startCreate() {
     setEditingExamId(null);
     setActiveNav("Create Exam");
@@ -91,17 +134,17 @@ export default function App() {
   }
   async function handleDelete(exam) {
     const result = await api.deleteExam(exam.id);
-    if (result && result.ok) {
-      await loadExams();
-    }
+    if (result && result.ok) await loadExams();
   }
   async function afterSaved() {
     await loadExams();
     setEditingExamId(null);
     setActiveNav("Manage Exams");
   }
+  function startExamFlow(exam) {
+    setExamFlow({ view: "preexam", exam, result: null });
+  }
 
-  // ---- Screen router ----
   function renderScreen() {
     switch (activeNav) {
       case "Dashboard":
@@ -109,6 +152,7 @@ export default function App() {
           <Dashboard
             isExaminer={isExaminer}
             exams={exams}
+            onStart={isExaminer ? null : startExamFlow}
             onEdit={startEdit}
             onDelete={handleDelete}
             onCreate={startCreate}
@@ -116,21 +160,10 @@ export default function App() {
         );
       case "Create Exam":
         return (
-          <CreateExam
-            examId={editingExamId}
-            onSaved={afterSaved}
-            onCancel={() => navigate("Manage Exams")}
-          />
+          <CreateExam examId={editingExamId} onSaved={afterSaved} onCancel={() => navigate("Manage Exams")} />
         );
       case "Manage Exams":
-        return (
-          <ManageExams
-            exams={exams}
-            onEdit={startEdit}
-            onDelete={handleDelete}
-            onCreate={startCreate}
-          />
-        );
+        return <ManageExams exams={exams} onEdit={startEdit} onDelete={handleDelete} onCreate={startCreate} />;
       case "Settings":
         return <Settings isExaminer={isExaminer} />;
       case "History":
@@ -156,7 +189,6 @@ export default function App() {
         onNavigate={navigate}
         onExaminerAction={handleExaminerAction}
       />
-
       <main className="workspace">
         <header className="workspace-header">
           <h1>{headerTitle}</h1>
