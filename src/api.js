@@ -30,6 +30,7 @@ export const api = {
   markForReview: (questionId, marked) => bridge.markForReview(questionId, marked),
   submitExam: () => bridge.submitExam(),
   getExamHistory: () => bridge.getExamHistory(),
+  clearExamHistory: () => bridge.clearExamHistory(),
   getExamReport: (attemptId) => bridge.getExamReport(attemptId),
   exportReport: (attemptId) => bridge.exportReport(attemptId),
   generateQuestions: (topic, count) => bridge.generateQuestions(topic, count),

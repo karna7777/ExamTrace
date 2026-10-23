@@ -416,6 +416,30 @@ body {
   margin-top: 16px;
 }
 
+.setup-student-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 12px 0 4px;
+}
+
+.camera-consent {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 8px 0 16px;
+}
+
+.camera-consent .camera-panel {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
 .code-block {
   background: #0f172a;
   color: #e2e8f0;

@@ -3,6 +3,7 @@
 // explicit confirmation. The name is self-reported (NOT authenticated identity).
 import React, { useState } from "react";
 import { api } from "../api.js";
+import CameraPreview from "../components/CameraPreview.jsx";
 
 export default function PreExam({ exam, settings, onStarted, onCancel }) {
   const [name, setName] = useState("");
@@ -50,6 +51,17 @@ export default function PreExam({ exam, settings, onStarted, onCancel }) {
             <li>Your name is self-reported and saved with this attempt - it is not verified identity.</li>
           </ul>
         </div>
+
+        {settings && settings.cameraMonitoring && (
+          <div className="camera-consent">
+            <p className="field-label">Camera check</p>
+            <p className="muted" style={{ marginBottom: 10 }}>
+              This exam uses camera monitoring. Please allow camera access when prompted. The preview
+              below is live and is never recorded or uploaded.
+            </p>
+            <CameraPreview />
+          </div>
+        )}
 
         <label className="field-label">Your name *</label>
         <input

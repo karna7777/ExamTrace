@@ -129,6 +129,25 @@ function registerHandlers() {
 
   // History + reports (finalized attempts; safe to expose answer keys here).
   ipcMain.handle("exam:getHistory", () => attemptService.getHistory());
+
+  // Clear all saved attempts (examiner-only, with a native confirmation).
+  ipcMain.handle("exam:clearHistory", async () => {
+    requireExaminer();
+    const attempts = await attemptService.readAttempts();
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showMessageBox(win, {
+      type: "warning",
+      buttons: ["Cancel", "Delete all"],
+      defaultId: 0,
+      cancelId: 0,
+      message: "Delete all exam history?",
+      detail:
+        attempts.length +
+        " saved attempt(s) will be permanently removed from this device. Exam definitions are not affected. This cannot be undone."
+    });
+    if (result.response !== 1) return { ok: false, cancelled: true };
+    return attemptService.clearHistory();
+  });
   ipcMain.handle("exam:getReport", (event, attemptId) => attemptService.getReport(attemptId));
 
   // Export a report to an HTML file the user chooses (native save dialog).

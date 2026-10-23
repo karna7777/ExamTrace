@@ -41,10 +41,15 @@ export default function ExaminerSetup({ onComplete }) {
           <span className="brand-mark">ET</span>
           <span className="brand-name dark">ExamTrace</span>
         </div>
-        <h1>First-time setup</h1>
+        <h1>Examiner setup (one-time)</h1>
         <p className="muted">
-          Create an examiner passcode. The examiner uses it to create and manage exams.
-          It is stored securely as a salted hash - never in plain text.
+          This is a one-time setup done by the <strong>examiner / teacher</strong> on this device.
+          Create an examiner passcode used to create and manage exams. It is stored securely as a
+          salted hash - never in plain text.
+        </p>
+        <p className="setup-student-note">
+          Taking an exam as a student? Ask your examiner to complete this setup - then the app opens
+          in Candidate Mode and you can start your exam.
         </p>
 
         <form onSubmit={handleSubmit}>

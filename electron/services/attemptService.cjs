@@ -23,6 +23,12 @@ async function hasAttempt(id) {
   return attempts.some((a) => a.id === id);
 }
 
+// Remove all finalized attempts (exam definitions are untouched).
+async function clearHistory() {
+  await storage.writeJson(ATTEMPTS_FILE, []);
+  return { ok: true };
+}
+
 // Append a finalized attempt. Idempotent: if an attempt with the same id is
 // already stored (e.g. a crash happened between writing history and clearing the
 // checkpoint), we do not create a duplicate.
@@ -85,6 +91,7 @@ async function getReport(attemptId) {
 module.exports = {
   readAttempts,
   hasAttempt,
+  clearHistory,
   saveFinalizedAttempt,
   saveCheckpoint,
   readCheckpoint,

@@ -12,6 +12,7 @@ export default function Settings({ isExaminer, settings, onSettingsChanged }) {
       <ThemePanel settings={settings} onSettingsChanged={onSettingsChanged} />
       {isExaminer && <ExaminerSettingsPanel settings={settings} onSettingsChanged={onSettingsChanged} />}
       {isExaminer && <GroqPanel settings={settings} onSettingsChanged={onSettingsChanged} />}
+      {isExaminer && <DataPanel />}
       {isExaminer && <ChangePasscode />}
     </div>
   );
@@ -177,6 +178,41 @@ function GroqPanel({ settings, onSettingsChanged }) {
       {message && <p className="status success">{message}</p>}
       <button className="btn btn-primary" onClick={save} disabled={busy}>
         {busy ? "Saving..." : "Save API key"}
+      </button>
+    </section>
+  );
+}
+
+function DataPanel() {
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function clear() {
+    setMessage(null);
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await api.clearExamHistory();
+      if (res && res.ok) setMessage("Exam history cleared.");
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>Data</h2>
+      <p className="muted">
+        Remove all saved exam attempts from this device to free up space. Exam definitions are not
+        affected. This cannot be undone.
+      </p>
+      {error && <p className="status error">{error}</p>}
+      {message && <p className="status success">{message}</p>}
+      <button className="btn btn-danger" onClick={clear} disabled={busy}>
+        {busy ? "Clearing..." : "Clear exam history"}
       </button>
     </section>
   );
