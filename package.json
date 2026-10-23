@@ -11,7 +11,9 @@
     "vite": "vite",
     "dev": "concurrently -k -n VITE,ELECTRON -c blue,green \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron .\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -21,7 +23,27 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
     "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "vite": "^6.0.7",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.supreet.examtrace",
+    "productName": "ExamTrace",
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.education",
+      "target": "dmg",
+      "extendInfo": {
+        "NSCameraUsageDescription": "ExamTrace can show a live camera preview during an examination when the examiner enables camera monitoring. No video is recorded or uploaded."
+      }
+    }
   }
 }
