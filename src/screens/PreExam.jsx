@@ -7,8 +7,10 @@ import CameraPreview from "../components/CameraPreview.jsx";
 
 export default function PreExam({ exam, settings, onStarted, onCancel }) {
   const [name, setName] = useState("");
+  const [studentId, setStudentId] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const isTeacher = exam.source === "teacher";
 
   async function handleStart() {
     setError(null);
@@ -18,7 +20,16 @@ export default function PreExam({ exam, settings, onStarted, onCancel }) {
     }
     setBusy(true);
     try {
-      await api.startExam(exam.id, name);
+      if (isTeacher) {
+        // Teacher exam: the server creates the official attempt and grades it.
+        const res = await api.net.startTeacherAttempt(exam.id, name, studentId);
+        if (res && res.ok === false) {
+          setError(res.error || "Could not start the teacher exam.");
+          return;
+        }
+      } else {
+        await api.startExam(exam.id, name);
+      }
       onStarted();
     } catch (err) {
       setError(String(err.message || err));
@@ -72,6 +83,18 @@ export default function PreExam({ exam, settings, onStarted, onCancel }) {
           autoFocus
           onKeyDown={(e) => e.key === "Enter" && handleStart()}
         />
+
+        {isTeacher && (
+          <>
+            <label className="field-label">Student ID</label>
+            <input
+              className="text-input"
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              placeholder="Your roll number / student ID (self-reported)"
+            />
+          </>
+        )}
 
         {error && <p className="status error">{error}</p>}
 

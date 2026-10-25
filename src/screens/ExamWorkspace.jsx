@@ -38,6 +38,10 @@ export default function ExamWorkspace({ onFinish }) {
         onFinish(result);
       }
     });
+    // Networked submission failures (server unreachable) - keep the exam open.
+    const cleanupSubmitError = api.onExamSubmitError((p) => {
+      setWarning((p && p.error) || "Submission failed. Reconnect and press Submit again.");
+    });
     // Live monitoring events: append to the timeline and update the status pill.
     const cleanupMonitoring = api.onMonitoringEvent((ev) => {
       setEvents((prev) => prev.concat(ev));
@@ -83,6 +87,7 @@ export default function ExamWorkspace({ onFinish }) {
       cleanupTimer();
       cleanupCompleted();
       cleanupMonitoring();
+      cleanupSubmitError();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -120,8 +125,10 @@ export default function ExamWorkspace({ onFinish }) {
   async function confirmSubmit() {
     setShowSubmit(false);
     try {
-      // The "exam:completed" event drives onFinish, so we just trigger it here.
-      await api.submitExam();
+      // On success the "exam:completed" event drives onFinish. A networked submit
+      // that fails returns { ok:false } - show it and let the student retry.
+      const r = await api.submitExam();
+      if (r && r.ok === false) setWarning(r.error || "Submission failed. Reconnect and press Submit again.");
     } catch (err) {
       setError(String(err.message || err));
     }

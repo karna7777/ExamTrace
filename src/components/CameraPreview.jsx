@@ -22,9 +22,22 @@ export default function CameraPreview() {
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        if (videoRef.current) {
+          const v = videoRef.current;
+          v.srcObject = stream;
+          // Set muted via the DOM node (the JSX `muted` prop is unreliable) so the
+          // browser allows autoplay; then start playback explicitly. Without this
+          // the preview can stay black.
+          v.muted = true;
+          v.setAttribute("playsinline", "");
+          try {
+            await v.play();
+          } catch {
+            // some environments need a tick before play() succeeds
+          }
+        }
       } catch (err) {
-        setError("Camera unavailable or permission denied.");
+        setError("Camera unavailable or permission denied. Close other apps using the camera and check macOS camera permission.");
       }
     }
     start();

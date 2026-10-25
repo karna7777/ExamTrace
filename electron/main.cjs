@@ -11,6 +11,8 @@ const path = require("path");
 const { registerHandlers } = require("./ipc/handlers.cjs");
 const windowRef = require("./windowRef.cjs");
 const examSession = require("./services/examSessionService.cjs");
+const settingsService = require("./services/settingsService.cjs");
+const backendService = require("./services/backendService.cjs");
 
 // IMPORTANT: set the application name BEFORE anything reads app.getPath().
 // This guarantees our user data lives in:
@@ -88,9 +90,18 @@ function createMainWindow() {
 
 // app.whenReady() resolves when Electron has finished initialising and it is
 // safe to create windows. This is part of the application lifecycle.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Register all IPC handlers once, before any window can call them.
   registerHandlers();
+
+  // Restore a previously configured teacher server URL (connected mode is opt-in;
+  // empty by default = pure standalone).
+  try {
+    const st = await settingsService.getSettings();
+    backendService.setServerUrl(st.serverUrl || "");
+  } catch {
+    // ignore - standalone still works
+  }
 
   // Allow the camera (media) for the optional camera-monitoring feature; deny
   // everything else by default. macOS still shows its own system permission

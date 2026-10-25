@@ -2,11 +2,16 @@
 // Mode, plus the Examiner Mode unlock / Lock Examiner Mode action at the bottom.
 import React from "react";
 
-const CANDIDATE_NAV = ["Dashboard", "My History", "My Reports", "Settings"];
-const EXAMINER_NAV = ["Dashboard", "Create Exam", "Manage Exams", "History", "Analytics", "Settings"];
+const CANDIDATE_NAV = ["Dashboard", "My History", "My Reports", "Connection", "Settings"];
+const EXAMINER_NAV = ["Dashboard", "Create Exam", "Manage Exams", "History", "Analytics", "Connection", "Settings"];
 
-export default function Sidebar({ isExaminer, active, onNavigate, onExaminerAction }) {
-  const items = isExaminer ? EXAMINER_NAV : CANDIDATE_NAV;
+export default function Sidebar({ isExaminer, active, onNavigate, onExaminerAction, teacherLoggedIn }) {
+  let items = isExaminer ? EXAMINER_NAV : CANDIDATE_NAV;
+  // When logged in to a teacher server, offer the Teacher Results screen.
+  if (teacherLoggedIn && !items.includes("Teacher Results")) {
+    items = [...items];
+    items.splice(items.indexOf("Connection"), 0, "Teacher Results");
+  }
 
   return (
     <aside className="sidebar">

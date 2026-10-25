@@ -157,6 +157,50 @@ assume a test passed without running it.
 
 ---
 
+## Optional: connected mode (teacher server)
+
+ExamTrace can optionally connect to a small **Express + SQLite** server so a teacher
+publishes exams and students on the same network take them, graded on the server.
+This is **opt-in** — with no server configured, ExamTrace is fully standalone, and
+**local exams are always available** (even when the server is down or has none
+published).
+
+**Run the server** (on the teacher's computer, separate from the app — it is *not*
+embedded in the packaged `.app`; needs Node ≥ 22.5 for the built-in `node:sqlite`):
+
+```bash
+npm run server        # localhost only (http://127.0.0.1:3000)
+npm run server:lan    # also reachable by other devices on the same Wi-Fi
+```
+
+The server prints its address. Data lives in `server/data/examtrace.db`
+(reset = delete that file).
+
+**Teacher:** open ExamTrace → **Connection** → enter the server address → **Connect**
+→ create/log in to the teacher account (account creation is **localhost-only**, so
+only the teacher's own machine can create it). Then create an exam as usual and press
+**Publish to students** in Manage Exams. **Preview** lets you take an exam as a student
+without it counting as an official result.
+
+**Student:** open ExamTrace → **Connection** → enter the teacher's address → **Connect**.
+Published teacher exams appear in a **Teacher Exams** section next to your local exams
+(no exam code needed). Starting one creates an official attempt; answers are graded on
+the server.
+
+**Teacher results:** the **Teacher Results** screen lists every official attempt with
+scores and a detailed report.
+
+How it stays safe: all networking runs in the Electron Main process; teacher exam
+**answer keys never leave the server** (students get sanitized questions and the server
+grades); submissions need a server-issued credential; the teacher password is stored
+as a scrypt hash; and the existing local exam engine is untouched.
+
+**Connected-mode limitations (academic LAN prototype):** plain HTTP, so the teacher
+password/token are observable on an untrusted network — assume a trusted classroom
+LAN (HTTPS is out of scope). A full app restart does not auto-resume an in-progress
+*teacher* attempt (renderer reload is fine). Session tokens reset if the server
+restarts.
+
 ## Known limitations
 
 - Local, application-level access control only — someone who can edit local files

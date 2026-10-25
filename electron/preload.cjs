@@ -59,5 +59,31 @@ contextBridge.exposeInMainWorld("examTrace", {
     const listener = (event, payload) => callback(payload);
     ipcRenderer.on("monitoring:event", listener);
     return () => ipcRenderer.removeListener("monitoring:event", listener);
+  },
+
+  // --- Optional teacher backend (connected mode) ---
+  net: {
+    getConnection: () => ipcRenderer.invoke("net:getConnection"),
+    connect: (url) => ipcRenderer.invoke("net:connect", url),
+    disconnect: () => ipcRenderer.invoke("net:disconnect"),
+    teacherExists: () => ipcRenderer.invoke("net:teacherExists"),
+    teacherSetup: (data) => ipcRenderer.invoke("net:teacherSetup", data),
+    teacherLogin: (data) => ipcRenderer.invoke("net:teacherLogin", data),
+    teacherLogout: () => ipcRenderer.invoke("net:teacherLogout"),
+    getTeacherExams: () => ipcRenderer.invoke("net:getTeacherExams"),
+    publishExam: (exam) => ipcRenderer.invoke("net:publishExam", exam),
+    closeExam: (examId) => ipcRenderer.invoke("net:closeExam", examId),
+    startTeacherAttempt: (examId, candidateName, studentId) =>
+      ipcRenderer.invoke("net:startTeacherAttempt", examId, candidateName, studentId),
+    startTeacherPreview: (examId) => ipcRenderer.invoke("net:startTeacherPreview", examId),
+    getResults: () => ipcRenderer.invoke("net:getResults"),
+    getResultDetail: (attemptId) => ipcRenderer.invoke("net:getResultDetail", attemptId)
+  },
+
+  // Fires when a networked submission fails (e.g. server unreachable).
+  onExamSubmitError: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on("exam:submitError", listener);
+    return () => ipcRenderer.removeListener("exam:submitError", listener);
   }
 });

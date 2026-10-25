@@ -14,6 +14,7 @@ const examSession = require("../services/examSessionService.cjs");
 const attemptService = require("../services/attemptService.cjs");
 const { buildReportHtml } = require("../services/reportExport.cjs");
 const groqService = require("../services/groqService.cjs");
+const backendService = require("../services/backendService.cjs");
 const fs = require("fs/promises");
 
 // True while a candidate examination is in progress. Examiner actions are
@@ -195,6 +196,53 @@ function registerHandlers() {
     requireExaminer();
     return groqService.generateQuestions(topic, count);
   });
+
+  // ---- Optional teacher backend (connected mode) ----
+  ipcMain.handle("net:getConnection", () => ({
+    serverUrl: backendService.getServerUrl(),
+    teacherLoggedIn: backendService.isTeacherLoggedIn()
+  }));
+
+  ipcMain.handle("net:connect", async (event, url) => {
+    backendService.setServerUrl(url);
+    await settingsService.updateSettings({ serverUrl: backendService.getServerUrl() }, authService.isUnlocked());
+    const h = await backendService.health();
+    return { ok: h.ok, serverUrl: backendService.getServerUrl(), error: h.error };
+  });
+
+  ipcMain.handle("net:disconnect", async () => {
+    backendService.clearSession();
+    backendService.setServerUrl("");
+    await settingsService.updateSettings({ serverUrl: "" }, authService.isUnlocked());
+    return { ok: true };
+  });
+
+  ipcMain.handle("net:teacherExists", () => backendService.teacherExists());
+  ipcMain.handle("net:teacherSetup", (event, data) =>
+    backendService.teacherSetup(data && data.username, data && data.password)
+  );
+  ipcMain.handle("net:teacherLogin", (event, data) =>
+    backendService.teacherLogin(data && data.username, data && data.password)
+  );
+  ipcMain.handle("net:teacherLogout", () => backendService.teacherLogout());
+
+  // Student-facing published teacher exams (metadata only). Combined with the local
+  // list in the Dashboard; the existing exam:getAvailable is unchanged.
+  ipcMain.handle("net:getTeacherExams", () => backendService.getPublicExams());
+  ipcMain.handle("net:publishExam", (event, exam) => backendService.publishExam(exam));
+  ipcMain.handle("net:closeExam", (event, examId) => backendService.closeExam(examId));
+
+  // Start a teacher (networked) exam / teacher preview. Grading is server-side.
+  ipcMain.handle("net:startTeacherAttempt", (event, examId, candidateName, studentId) =>
+    examSession.startNetworkedExam(examId, candidateName, studentId)
+  );
+  ipcMain.handle("net:startTeacherPreview", (event, examId) =>
+    examSession.startNetworkedExam(examId, "Preview", "", { preview: true })
+  );
+
+  // Teacher results (server).
+  ipcMain.handle("net:getResults", () => backendService.getResults());
+  ipcMain.handle("net:getResultDetail", (event, attemptId) => backendService.getResultDetail(attemptId));
 }
 
 module.exports = { registerHandlers };

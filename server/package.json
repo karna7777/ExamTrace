@@ -1,0 +1,13 @@
+{
+  "name": "examtrace-server",
+  "version": "0.1.0",
+  "description": "ExamTrace LAN backend (Express + node:sqlite). Runs separately on system Node.js.",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

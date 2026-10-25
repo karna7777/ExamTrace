@@ -534,6 +534,43 @@ body {
   white-space: nowrap;
 }
 
+.badge-teacher {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.conn-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.conn-pill.connected {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.conn-pill.unreachable {
+  background: #fee2e2;
+  color: var(--error);
+}
+
+.manage-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.publish-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .exam-subject {
   margin: 4px 0 0;
   font-size: 13px;

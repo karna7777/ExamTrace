@@ -23,6 +23,8 @@ import ExamWorkspace from "./screens/ExamWorkspace.jsx";
 import ExamResult from "./screens/ExamResult.jsx";
 import History from "./screens/History.jsx";
 import Analytics from "./screens/Analytics.jsx";
+import Connection from "./screens/Connection.jsx";
+import TeacherResults from "./screens/TeacherResults.jsx";
 
 // Apply the chosen theme. "system" removes the attribute so the OS setting (via
 // a CSS media query) decides; "light"/"dark" force it.
@@ -41,6 +43,16 @@ export default function App() {
   // examFlow.view: "none" | "preexam" | "workspace" | "result"
   const [examFlow, setExamFlow] = useState({ view: "none", exam: null, result: null });
   const [settings, setSettings] = useState(null);
+  const [teacherLoggedIn, setTeacherLoggedIn] = useState(false);
+
+  async function refreshConnection() {
+    try {
+      const c = await api.net.getConnection();
+      setTeacherLoggedIn(!!c.teacherLoggedIn);
+    } catch {
+      setTeacherLoggedIn(false);
+    }
+  }
 
   async function refreshStatus() {
     const s = await api.getExaminerStatus();
@@ -78,6 +90,7 @@ export default function App() {
       await loadSettings();
       await refreshStatus();
       await loadExams();
+      await refreshConnection();
     }
     boot();
   }, []);
@@ -174,6 +187,21 @@ export default function App() {
   function startExamFlow(exam) {
     setExamFlow({ view: "preexam", exam, result: null });
   }
+  // Publish a local exam to the connected teacher server (teacher must be logged in).
+  async function handlePublish(exam) {
+    const full = await api.getExamForEdit(exam.id); // examiner-only; teacher is unlocked
+    return api.net.publishExam(full);
+  }
+  function handleClose(exam) {
+    return api.net.closeExam(exam.id);
+  }
+  // Teacher preview: start a non-official attempt in the existing workspace.
+  async function handlePreview(exam) {
+    const res = await api.net.startTeacherPreview(exam.id);
+    if (res && res.ok === false) return res;
+    setExamFlow({ view: "workspace", exam: null, result: null });
+    return { ok: true };
+  }
 
   function renderScreen() {
     switch (activeNav) {
@@ -193,7 +221,22 @@ export default function App() {
           <CreateExam examId={editingExamId} onSaved={afterSaved} onCancel={() => navigate("Manage Exams")} />
         );
       case "Manage Exams":
-        return <ManageExams exams={exams} onEdit={startEdit} onDelete={handleDelete} onCreate={startCreate} />;
+        return (
+          <ManageExams
+            exams={exams}
+            onEdit={startEdit}
+            onDelete={handleDelete}
+            onCreate={startCreate}
+            teacherLoggedIn={teacherLoggedIn}
+            onPublish={handlePublish}
+            onClose={handleClose}
+            onPreview={handlePreview}
+          />
+        );
+      case "Connection":
+        return <Connection onChanged={refreshConnection} />;
+      case "Teacher Results":
+        return <TeacherResults />;
       case "Settings":
         return (
           <Settings
@@ -223,6 +266,7 @@ export default function App() {
         active={activeNav}
         onNavigate={navigate}
         onExaminerAction={handleExaminerAction}
+        teacherLoggedIn={teacherLoggedIn}
       />
       <main className="workspace">
         <header className="workspace-header">

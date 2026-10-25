@@ -42,7 +42,11 @@ export const api = {
   // Events (return a cleanup function)
   onTimerUpdate: (cb) => bridge.onTimerUpdate(cb),
   onExamCompleted: (cb) => bridge.onExamCompleted(cb),
-  onMonitoringEvent: (cb) => bridge.onMonitoringEvent(cb)
+  onMonitoringEvent: (cb) => bridge.onMonitoringEvent(cb),
+
+  // Optional teacher backend (connected mode)
+  net: bridge.net,
+  onExamSubmitError: (cb) => bridge.onExamSubmitError(cb)
 };
 
 // Human-friendly label + classification for a monitoring event type. Neutral

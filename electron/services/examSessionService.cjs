@@ -22,6 +22,7 @@ const examService = require("./examService.cjs");
 const settingsService = require("./settingsService.cjs");
 const monitoringService = require("./monitoringService.cjs");
 const attemptService = require("./attemptService.cjs");
+const backendService = require("./backendService.cjs");
 const windowRef = require("../windowRef.cjs");
 
 let activeAttempt = null; // the full attempt object (internal, includes answer key)
@@ -42,7 +43,9 @@ const recoveryDone = new Promise((resolve) => {
 // Persist the current in-progress attempt (checkpoint). Fire-and-forget: the
 // storage write queue preserves order.
 function checkpoint() {
-  if (activeAttempt && activeAttempt.status === "in_progress") {
+  // Only LOCAL attempts are checkpointed to disk. Networked (teacher) attempts are
+  // owned by the server, so we never write them into the local active-attempt file.
+  if (activeAttempt && activeAttempt.status === "in_progress" && activeAttempt.mode === "local") {
     attemptService.saveCheckpoint(serializeAttempt(activeAttempt));
   }
 }
@@ -72,6 +75,8 @@ function getActiveExam() {
   return {
     attemptId: a.id,
     examId: a.examId,
+    source: a.source || "local",
+    preview: !!a.preview,
     title: a.examSnapshot.title,
     subject: a.examSnapshot.subject,
     candidateName: a.candidateName,
@@ -108,6 +113,8 @@ async function startExam(examId, candidateName) {
 
     activeAttempt = {
       id: "attempt-" + crypto.randomUUID(),
+      mode: "local",
+      source: "local",
       examId: exam.id,
       candidateName: name,
       // Immutable internal snapshot WITH the answer key. Never sent to renderer.
@@ -140,6 +147,70 @@ async function startExam(examId, candidateName) {
     // Initial checkpoint so the attempt survives a restart from the very start.
     checkpoint();
 
+    return getActiveExam();
+  } finally {
+    starting = false;
+  }
+}
+
+// Start a TEACHER (networked) exam. The server owns the attempt, deadline and
+// answer key; we only get sanitized questions. Reuses the same timer + workspace +
+// monitoring as a local exam. `opts.preview` starts a teacher preview attempt.
+async function startNetworkedExam(examId, candidateName, studentId, opts = {}) {
+  if (isExamActive() || starting) {
+    throw new Error("An examination is already in progress.");
+  }
+  starting = true;
+  try {
+    const preview = !!opts.preview;
+    const name = typeof candidateName === "string" ? candidateName.trim() : "";
+    if (!preview && !name) throw new Error("Please enter your name to begin the examination.");
+
+    const res = preview
+      ? await backendService.startPreview(examId)
+      : await backendService.startAttempt(examId, name, typeof studentId === "string" ? studentId.trim() : "");
+    if (!res.ok) throw new Error(res.error || "Could not start the teacher exam.");
+    const d = res.data;
+    const deadlineMs = new Date(d.deadline).getTime();
+
+    activeAttempt = {
+      id: "attempt-" + crypto.randomUUID(), // local UI id
+      mode: "network",
+      source: "teacher",
+      preview,
+      serverAttemptId: d.attemptId,
+      credential: d.credential,
+      examId,
+      candidateName: preview ? "Preview (teacher)" : name,
+      studentId: typeof studentId === "string" ? studentId.trim() : "",
+      // Sanitized snapshot from the server - NO answer key present.
+      examSnapshot: {
+        title: d.title,
+        subject: d.subject,
+        durationMinutes: d.durationMinutes,
+        questions: Array.isArray(d.questions) ? d.questions : []
+      },
+      startedAt: new Date().toISOString(),
+      deadline: d.deadline,
+      deadlineMs,
+      endedAt: null,
+      status: "in_progress",
+      answers: {},
+      markedForReview: [],
+      events: [],
+      result: null
+    };
+
+    startTimer();
+    const settings = await settingsService.getSettings();
+    const idleThresholdSeconds = settings.demoMode ? 10 : settings.inactivityThresholdSeconds;
+    monitoringService.start(activeAttempt, {
+      idleThresholdSeconds,
+      fullscreenEnabled: settings.fullscreenDuringExam,
+      win: windowRef.getMainWindow(),
+      onEvent: checkpoint // no-op for network (checkpoint is local-only)
+    });
+    // No local checkpoint for networked attempts - the server is authoritative.
     return getActiveExam();
   } finally {
     starting = false;
@@ -241,10 +312,49 @@ function buildResult() {
   };
 }
 
-// Finalize exactly once. submissionType is "manual" or "auto".
-// The status is set synchronously (before any await) so a concurrent call sees
-// it and returns the existing result - guaranteeing exactly-once scoring.
+// Dispatch finalization by attempt mode.
 async function finalizeExam(submissionType) {
+  if (!activeAttempt) return null;
+  if (activeAttempt.mode === "network") return finalizeNetwork(submissionType);
+  return finalizeLocal(submissionType);
+}
+
+// Networked finalize: the SERVER grades. We submit answers (+ monitoring events),
+// and only mark the attempt finished if the server accepts it - so a failed submit
+// (e.g. server down) leaves the exam running and the student can retry.
+async function finalizeNetwork(submissionType) {
+  const a = activeAttempt;
+  if (!a || a.status !== "in_progress") return a ? a.result : null;
+  if (a._submitting) return { ok: false, error: "A submission is already in progress." };
+  a._submitting = true;
+  try {
+    const res = await backendService.submitAttempt(
+      a.serverAttemptId,
+      a.credential,
+      a.answers,
+      a.events,
+      submissionType === "auto"
+    );
+    if (!res.ok) {
+      windowRef.sendToRenderer("exam:submitError", { error: res.error || "Could not submit to the server." });
+      return { ok: false, error: res.error || "Could not submit to the server." };
+    }
+    stopTimer();
+    monitoringService.stop(submissionType);
+    a.status = submissionType === "auto" ? "auto_submitted" : "submitted";
+    a.endedAt = new Date().toISOString();
+    a.result = (res.data && res.data.result) || res.data;
+    windowRef.sendToRenderer("exam:completed", a.result);
+    showCompletionNotification(a.result);
+    return a.result;
+  } finally {
+    a._submitting = false;
+  }
+}
+
+// Local finalize: grade in Main, persist to local history. Exactly-once via the
+// status check set synchronously before any await.
+async function finalizeLocal(submissionType) {
   if (!activeAttempt) return null;
   if (activeAttempt.status !== "in_progress") {
     return activeAttempt.result;
@@ -402,6 +512,7 @@ function tick() {
     remainingMs
   });
   if (remainingMs <= 0) {
+    stopTimer(); // stop first so a failed networked auto-submit doesn't repeat each tick
     finalizeExam("auto"); // deadline reached -> auto submit
   }
 }
@@ -416,6 +527,7 @@ function stopTimer() {
 module.exports = {
   isExamActive,
   startExam,
+  startNetworkedExam,
   getActiveExam,
   getActiveExamAsync,
   getRecoveredResult,

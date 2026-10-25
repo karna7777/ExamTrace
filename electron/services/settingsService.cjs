@@ -18,11 +18,13 @@ const DEFAULTS = {
   demoMode: false,
   cameraMonitoring: false,
   groqApiKey: "", // examiner-only; never returned to the renderer (see settings:get)
-  sampleExamSeeded: false
+  sampleExamSeeded: false,
+  serverUrl: "" // optional teacher server; a student may set this too
 };
 
 // Settings a candidate (not unlocked as examiner) is allowed to change.
-const CANDIDATE_ALLOWED_KEYS = ["theme"];
+// serverUrl is allowed because students connect to a teacher server too.
+const CANDIDATE_ALLOWED_KEYS = ["theme", "serverUrl"];
 
 async function getSettings() {
   const saved = await storage.readJson(SETTINGS_FILE, {});
